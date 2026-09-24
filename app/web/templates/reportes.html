@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block titulo %}Reportes{% endblock %}
+{% block contenido %}
+<div class="topbar"><div><h1>Reportes Excel</h1><div class="sub">Generados por los agentes o por el Copiloto a petición · se conservan en el disco persistente</div></div><div class="acciones"><a class="btn teal" href="/copiloto">💬 Pedir un Excel al Copiloto</a></div></div>
+<div class="card"><table class="tabla"><thead><tr><th>#</th><th>Título</th><th>Tipo</th><th class="num">Filas</th><th class="num">Tamaño</th><th>Creado</th><th>Por</th><th></th></tr></thead><tbody>
+{% for r in reportes %}<tr><td>{{ r.id }}</td><td><b>{{ r.titulo }}</b><div class="mini">{{ r.archivo }}</div></td><td><span class="chip">{{ r.tipo }}</span></td><td class="num">{{ '{:,}'.format(r.filas or 0) }}</td><td class="num">{{ '%.0f'|format((r.bytes or 0)/1024) }} KB</td><td class="mini">{{ r.creado_en[:16].replace('T',' ') }}</td><td class="mini">{{ r.creado_por }}</td><td class="right"><a class="btn sm sec" href="/reportes/{{ r.id }}/descargar">⬇ Descargar</a></td></tr>
+{% else %}<tr><td colspan="8" class="txt-muted">Aún no hay reportes.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

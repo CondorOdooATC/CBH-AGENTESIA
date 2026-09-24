@@ -1,0 +1,17 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Acceso · {{ app_name }}</title><link rel="stylesheet" href="/static/styles.css"></head>
+<body style="background:linear-gradient(135deg,#714B67 0%,#017E84 100%);min-height:100vh">
+<div class="card login">
+  <div class="brand" style="color:var(--ink);border-color:var(--line)"><div class="logo" style="background:var(--odoo);color:#fff">CB</div><div><b>{{ app_name }}</b><small style="color:var(--muted)">{{ cliente }} · {{ org }}</small></div></div>
+  {% if error %}<div class="alerta bad">{{ error }}</div>{% endif %}
+  <form method="post" action="/login">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>Usuario</label><input name="usuario" autofocus autocomplete="username" required>
+    <label style="margin-top:10px">Contraseña</label><input name="password" type="password" autocomplete="current-password" required>
+    <button class="btn" style="width:100%;justify-content:center;margin-top:16px" type="submit">Entrar</button>
+  </form>
+  {% if demo %}<p class="txt-muted txt-sm" style="margin-top:14px">Modo demostración: usuario <code>admin</code>, contraseña definida en <code>ADMIN_PASSWORD</code>.</p>{% endif %}
+  {% if odoo_url %}<p class="txt-muted txt-sm" style="margin-top:14px">¿Usuario de Odoo? Entra desde el menú <b>Agentes de IA</b> de Odoo (sin contraseña adicional).</p>
+  <p id="abrir-pestana" class="txt-sm" style="display:none;margin-top:8px"><a class="btn sec" target="_blank" rel="noopener" href="{{ odoo_url }}/cbh_agentes_ia/abrir">Abrir Agentes de IA en una pestaña nueva</a><br><span class="txt-muted">Tu navegador no permite la sesión dentro de Odoo (cookies de terceros).</span></p>
+  <script>try{ if(window.top!==window.self){ document.getElementById('abrir-pestana').style.display='block'; } }catch(e){}</script>{% endif %}
+</div></body></html>

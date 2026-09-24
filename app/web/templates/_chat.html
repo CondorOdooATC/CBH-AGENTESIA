@@ -1,0 +1,25 @@
+{# Panel de conversación con un agente o sobre un caso. Variables: chat_titulo, chat_contexto (json), chat_sugerencias (lista) #}
+<div class="card chat-agente" id="chat-agente" data-contexto='{{ chat_contexto|tojson }}'>
+  <h2>💬 {{ chat_titulo }} <span class="r">{{ 'con Claude' if llm else 'modo determinista' }}</span></h2>
+  <div class="sugerencias">{% for sgr in chat_sugerencias %}<button onclick="chatSugerir(this)">{{ sgr }}</button>{% endfor %}</div>
+  <div class="mensajes" id="chat-mensajes" style="max-height:340px;min-height:120px"><div class="msg bot"><div class="md">Soy {{ chat_titulo }}. Pregúntame lo que quieras sobre lo que encontré; si me das contexto nuevo, lo aprendo.</div></div></div>
+  <div class="pensando" id="chat-pensando" style="display:none">Pensando…</div>
+  <div class="compositor"><textarea id="chat-texto" placeholder="Escribe aquí… (Enter para enviar)"></textarea><button class="btn" id="chat-enviar" onclick="chatEnviar()"><span class="spin"></span>Enviar</button></div>
+</div>
+<script>
+(function(){
+  const box=document.getElementById('chat-agente'); if(!box) return; const CTX=JSON.parse(box.dataset.contexto||'{}');
+  window.chatSugerir=(b)=>{ document.getElementById('chat-texto').value=b.textContent; document.getElementById('chat-texto').focus(); };
+  function add(rol, html){ const d=document.createElement('div'); d.className='msg '+rol; d.innerHTML=html; const m=document.getElementById('chat-mensajes'); m.appendChild(d); m.scrollTop=1e9; }
+  window.chatEnviar=async()=>{ const ta=document.getElementById('chat-texto'); const t=ta.value.trim(); if(!t) return; ta.value=''; add('user', esc(t));
+    const btn=document.getElementById('chat-enviar'); btn.disabled=true; btn.classList.add('loading'); document.getElementById('chat-pensando').style.display='block';
+    try{ const r=await api('/api/chat','POST',{texto:t, contexto:CTX}); let tools=''; if(r.herramientas&&r.herramientas.length){ tools='<div class="tools">🛠 '+r.herramientas.map(h=>esc(h.nombre)).join(' · ')+'</div>'; }
+      add('bot','<div class="md">'+md(r.texto||'(sin respuesta)')+'</div>'+tools); }
+    catch(e){ add('bot','<div class="md" style="color:var(--bad)">Error: '+esc(e.message)+'</div>'); }
+    finally{ btn.disabled=false; btn.classList.remove('loading'); document.getElementById('chat-pensando').style.display='none'; } };
+  document.addEventListener('DOMContentLoaded', async()=>{
+    document.getElementById('chat-texto').addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); chatEnviar(); } });
+    try{ const q=new URLSearchParams(CTX.caso_id?{caso_id:CTX.caso_id}:{agente:CTX.agente}); const h=await api('/api/chat/contexto?'+q); (h.mensajes||[]).slice(-12).forEach(m=>add(m.rol==='user'?'user':'bot', m.rol==='user'?esc(m.texto):'<div class="md">'+md(m.texto)+'</div>')); }catch(e){}
+  });
+})();
+</script>

@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block titulo %}Casos{% endblock %}
+{% block contenido %}
+<div class="topbar"><div><h1>Casos investigados</h1><div class="sub">Expedientes del Agente Investigador: evidencia, hipótesis, conclusión y acción. Cerrar un caso con su resolución entrena a los agentes.</div></div>
+  <div class="acciones">{% for e in ['abierto','en_revision','resuelto','descartado'] %}<a class="chip {{ 'odoo' if estado==e }}" href="/casos?estado={{ e }}">{{ e.replace('_',' ') }}</a>{% endfor %}<a class="chip {{ 'odoo' if estado=='todos' }}" href="/casos?estado=todos">todos</a></div></div>
+<div class="dinero mb">
+  <div class="d"><div class="l">Sujeto a revisión</div><div class="v" style="color:var(--warn)">${{ '{:,.0f}'.format(exposicion.sujeto_a_revision or 0) }}</div></div>
+  <div class="d"><div class="l">Pérdida confirmada</div><div class="v" style="color:var(--bad)">${{ '{:,.0f}'.format(exposicion.confirmado or 0) }}</div></div>
+  <div class="d"><div class="l">Aclarado</div><div class="v" style="color:var(--ok)">${{ '{:,.0f}'.format(exposicion.aclarado or 0) }}</div></div>
+  <div class="d"><div class="l">Casos en esta vista</div><div class="v">{{ casos|length }}</div></div>
+  <div class="d"><div class="l">Impacto de la vista</div><div class="v">${{ '{:,.0f}'.format(casos|sum(attribute='impacto_mxn')) }}</div></div>
+</div>
+<div class="grid g3">
+{% for c in casos %}{% set e = c.expediente or {} %}
+<div class="caso {{ c.severidad }}">
+  <div><span class="badge {{ c.severidad }}">{{ c.severidad }}</span> <span class="chip">{{ c.tipo }}</span> <span class="badge {{ 'ok' if c.estado=='resuelto' else ('info' if c.estado=='en_revision' else ('sin_movimiento' if c.estado=='descartado' else 'nueva')) }}">{{ c.estado.replace('_',' ') }}</span></div>
+  <h3><a href="/casos/{{ c.id }}">#{{ c.id }} · {{ c.titulo }}</a></h3>
+  {# resumen: la conclusión de la IA en una o dos líneas y la acción recomendada; todo lo demás bajo «ver más» #}
+  {% set concl = (c.conclusion or e.que_paso or '') %}
+  <div class="resumen-caso"><b>Conclusión ({{ c.confianza }}):</b> {{ concl[:160] }}{{ '…' if concl|length > 160 }}</div>
+  {% if e.accion_recomendada %}<div class="resumen-caso mt" style="margin-top:6px"><b>Qué hacer:</b> {{ e.accion_recomendada[:140] }}{{ '…' if e.accion_recomendada|length > 140 }}{% if e.responsable %} <span class="txt-muted">· {{ e.responsable }}</span>{% endif %}</div>{% endif %}
+  <div style="margin-top:6px"><button class="ver-mas" onclick="verMas(this)">Ver más ▾</button></div>
+  <div class="detalle-caso" hidden>
+    <div class="q">Qué pasó</div><p>{{ e.que_paso or '' }}</p>
+    {% if e.hipotesis %}<div class="q">Hipótesis por verificar</div>{% for h in e.hipotesis %}<div class="hip"><span class="badge {{ 'alta' if h.plausibilidad=='alta' else ('media' if h.plausibilidad=='media' else 'baja') }}" style="text-transform:none">{{ h.plausibilidad }}</span><span style="flex:1">{{ h.hipotesis }}</span></div>{% endfor %}{% endif %}
+    <div class="q">Conclusión completa</div><p>{{ c.conclusion or '' }}</p>
+    {% if e.accion_recomendada %}<div class="q">Acción recomendada</div><p>{{ e.accion_recomendada }}{% if e.responsable %} — <i>{{ e.responsable }}</i>{% endif %}</p>{% endif %}
+  </div>
+  <div style="display:flex;gap:6px;align-items:center;margin-top:8px"><a class="btn sm sec" href="/casos/{{ c.id }}">Expediente</a>{% if usuario.rol != 'consulta' and c.estado in ('abierto','en_revision') %}<button class="btn sm ok" onclick="resolverCaso({{ c.id }},'resuelto')">Resolver</button><button class="btn sm ghost" onclick="resolverCaso({{ c.id }},'descartado')">Descartar</button>{% endif %}<span style="margin-left:auto;font-weight:700;color:var(--bad)" title="Impacto económico estimado del caso (MXN)">${{ '{:,.0f}'.format(c.impacto_mxn or 0) }}</span></div>
+</div>
+{% else %}<div class="card txt-muted">Sin casos en este estado.</div>{% endfor %}
+</div>
+{% endblock %}

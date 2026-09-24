@@ -1,0 +1,45 @@
+{% extends "base.html" %}{% block titulo %}Copiloto{% endblock %}
+{% block contenido %}
+<div class="topbar"><div><h1>Copiloto</h1><div class="sub">Consulta Odoo, genera reportes, propone y ejecuta acciones con tu aprobación, envía avisos y correos</div></div>
+<div class="acciones"><button class="btn sec" onclick="nuevaConv()">＋ Nueva conversación</button></div></div>
+<div class="chat chat-amplio">
+  <div class="card lista">
+    {% for c in conversaciones %}<a href="/copiloto?c={{ c.id }}" class="{{ 'activa' if c.id==conversacion_id }}">{{ c.titulo }}<div class="mini">{{ (c.actualizado_en or c.creado_en)[:16].replace('T',' ') }}</div></a>{% endfor %}
+  </div>
+  <div class="card panel">
+    {# sugerencias con nombres reales de las últimas corridas; sólo se muestran al empezar una conversación y se pueden ocultar #}
+    <button class="sug-toggle" id="sug-toggle" onclick="toggleSug()">{{ '▸ Ver ideas de preguntas' if mensajes else '▾ Ocultar ideas de preguntas' }}</button>
+    <div class="sugerencias compacta" id="sugerencias" {{ 'hidden' if mensajes }}>
+      {% for s in sugerencias[:4] %}<button onclick="sugerir(this)" title="{{ s }}">{{ s }}</button>{% endfor %}
+    </div>
+    <div class="mensajes" id="mensajes">
+      {% for m in mensajes %}<div class="msg {{ 'user' if m.rol=='user' else 'bot' }}">{% if m.rol=='user' %}{{ m.texto }}{% else %}<div class="md" data-md="{{ m.texto|e }}"></div>{% endif %}</div>{% endfor %}
+      {% if not mensajes %}<div class="msg bot"><div class="md">Hola, soy el <b>Copiloto de CBH</b>. Puedo consultar Odoo en vivo (consumo, existencias, compras, facturación), generar Excels de lo que pidas, proponer y ejecutar acciones en Odoo con tu aprobación, avisar a personas y enviar correos. ¿Por dónde empezamos?</div></div>{% endif %}
+    </div>
+    <div class="pensando" id="pensando" style="display:none">Consultando…</div>
+    <div class="compositor">
+      <textarea id="texto" placeholder="Escribe tu pregunta o solicitud… (Enter para enviar, Shift+Enter salto de línea)"></textarea>
+      <button class="btn" id="enviar" onclick="enviar()"><span class="spin"></span>Enviar</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script>
+const CID = {{ conversacion_id }};
+function sugerir(b){ $('#texto').value = b.textContent; $('#texto').focus(); }
+function toggleSug(){ const s=$('#sugerencias'); s.hidden=!s.hidden; $('#sug-toggle').textContent = s.hidden? '▸ Ver ideas de preguntas' : '▾ Ocultar ideas de preguntas'; }
+async function nuevaConv(){ const r = await api('/api/conversaciones','POST'); location.href='/copiloto?c='+r.id; }
+function agregar(rol, html){ const d=document.createElement('div'); d.className='msg '+rol; d.innerHTML=html; $('#mensajes').appendChild(d); $('#mensajes').scrollTop=1e9; return d; }
+async function enviar(){
+  const t = $('#texto').value.trim(); if(!t) return;
+  const s=$('#sugerencias'); if(s && !s.hidden){ toggleSug(); }
+  $('#texto').value=''; agregar('user', esc(t)); const btn=$('#enviar'); btn.disabled=true; btn.classList.add('loading'); $('#pensando').style.display='block';
+  try{ const r = await api('/api/chat','POST',{conversacion_id: CID, texto: t});
+       let tools=''; if(r.herramientas&&r.herramientas.length){ tools='<div class="tools">🛠 '+r.herramientas.map(h=>esc(h.nombre)+(h.ok?'':' ⚠')+' <span class="txt-muted">('+esc(h.resumen||'')+', '+h.segundos+'s)</span>').join(' · ')+'</div>'; }
+       agregar('bot', '<div class="md">'+md(r.texto||'(sin respuesta)')+'</div>'+tools);
+  }catch(e){ agregar('bot', '<div class="md" style="color:var(--bad)">Error: '+esc(e.message)+'</div>'); }
+  finally{ btn.disabled=false; btn.classList.remove('loading'); $('#pensando').style.display='none'; }
+}
+document.addEventListener('DOMContentLoaded', ()=>{ $('#texto').addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); enviar(); } }); $('#mensajes').scrollTop=1e9;
+  try{ const q=sessionStorage.getItem('pregunta_'+CID); if(q){ sessionStorage.removeItem('pregunta_'+CID); $('#texto').value=q; enviar(); } }catch(e){} });
+</script>{% endblock %}

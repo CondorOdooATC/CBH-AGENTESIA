@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <record id="res_config_settings_view_form_cbh_agentes" model="ir.ui.view">
+    <field name="name">res.config.settings.view.form.inherit.cbh_agentes_ia</field>
+    <field name="model">res.config.settings</field>
+    <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//form" position="inside">
+        <app data-string="Agentes de IA" string="Agentes de IA" name="cbh_agentes_ia" groups="base.group_system">
+          <block title="Plataforma de Agentes de IA (Ingeniería Cóndor)" name="cbh_agentes_plataforma">
+            <setting string="URL de la plataforma" help="Dirección del servicio en Render (staging o producción). Sin diagonal final.">
+              <field name="cbh_agentes_url" placeholder="https://agentes.i-condor.mx"/>
+            </setting>
+            <setting string="Cómo se abre" help="Pestaña nueva es lo más robusto. El modo embebido requiere EMBED_ORIGINS en Render y no funciona en navegadores que bloquean cookies de terceros (Safari).">
+              <field name="cbh_agentes_modo" widget="radio"/>
+            </setting>
+            <setting string="Secreto compartido (SSO)" help="Firma los enlaces de acceso. Sólo lo ven administradores de Odoo. Debe ser idéntico a SSO_SECRET en Render.">
+              <field name="cbh_agentes_secreto" password="True"/>
+              <div class="mt-2">
+                <button name="action_regenerar_secreto" type="object" string="Regenerar secreto" class="btn-secondary" confirm="Se generará un secreto nuevo; el acceso desde Odoo dejará de funcionar hasta copiarlo a Render. ¿Continuar?"/>
+                <button name="action_probar_conexion" type="object" string="Probar conexión" class="btn-primary ms-2"/>
+              </div>
+            </setting>
+            <setting string="Usuario técnico y clave API" help="agente.ia@i-condor.com: con él la plataforma lee y escribe en Odoo. No tiene contraseña; sólo entra por clave API (RPC).">
+              <field name="cbh_agentes_api_key" password="True"/>
+              <div class="mt-2">
+                <button name="action_generar_clave_api" type="object" string="Generar clave API" class="btn-secondary" confirm="Se revocará la clave anterior del usuario técnico y se generará una nueva. Deberás copiarla a ODOO_API_KEY en Render. ¿Continuar?"/>
+              </div>
+            </setting>
+          </block>
+          <block title="Datos para copiar a Render (Environment del servicio)" name="cbh_agentes_render">
+            <setting string="Variables de entorno" help="Copia estas líneas en Render ▸ servicio ▸ Environment. Los valores sensibles no se muestran a usuarios sin rol de administrador.">
+              <field name="cbh_agentes_datos_render" readonly="1" nolabel="1" widget="text"/>
+            </setting>
+          </block>
+        </app>
+      </xpath>
+    </field>
+  </record>
+</odoo>

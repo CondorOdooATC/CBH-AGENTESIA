@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block titulo %}{{ app_short }}{% endblock %} · {{ app_name }}</title>
+<link rel="stylesheet" href="/static/styles.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+{% set envc = 'demo' if demo else ('prod' if entorno=='PRODUCCIÓN' else 'staging') %}
+<div class="env {{ envc }}"></div>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand"><div class="logo">CB</div><div><b>{{ app_short }}</b><small>{{ cliente }} · v{{ version }}</small></div></div>
+    <nav class="nav">
+      <a href="/" class="{{ 'activa' if request.url.path=='/' }}">☀️ Hoy</a>
+      <a href="/agentes/consumo" class="{{ 'activa' if 'consumo' in request.url.path }}">🔎 Agente · Consumo</a>
+      <a href="/agentes/demanda" class="{{ 'activa' if 'demanda' in request.url.path }}">📈 Agente · Abasto</a>
+      <a href="/copiloto" class="{{ 'activa' if 'copiloto' in request.url.path }}">💬 Copiloto</a>
+      <a href="/acciones" class="{{ 'activa' if 'acciones' in request.url.path }}">✅ Decisiones {% if pendientes %}<span class="pill">{{ pendientes }}</span>{% endif %}</a>
+      <a href="/casos" class="{{ 'activa' if request.url.path.startswith('/casos') }}">📁 Casos</a>
+      <a href="/hallazgos" class="{{ 'activa' if 'hallazgos' in request.url.path }}">🚩 Hallazgos</a>
+      <a href="/reportes" class="{{ 'activa' if 'reportes' in request.url.path }}">📊 Excel</a>
+      <div class="sep"></div>
+      <a href="/configuracion" class="{{ 'activa' if 'configuracion' in request.url.path }}">⚙️ Configuración</a>
+      <a href="/bitacora" class="{{ 'activa' if 'bitacora' in request.url.path }}">📜 Bitácora</a>
+    </nav>
+    <div class="foot">
+      <div style="margin-bottom:8px"><span class="env-chip {{ envc }}">{{ entorno }}</span> {% if llm %}<span class="chip ok">Claude activo</span>{% else %}<span class="chip">Sin Claude · modo determinista</span>{% endif %}</div>
+      {% if usuario %}{{ usuario.nombre }} · <em>{{ usuario.rol }}</em><br>
+      <form method="post" action="/logout"><button type="submit">Cerrar sesión</button></form>{% endif %}
+      <div style="margin-top:6px;opacity:.7">{{ org }}</div>
+    </div>
+  </aside>
+  <main class="main">
+    {% if modo_respaldo %}
+    <div class="alerta warn" id="aviso-respaldo" style="margin:0 0 14px">
+      <b>⚠️ Módulo de folios no detectado.</b> La plataforma buscó en Odoo el módulo de folios de operación médica y todavía no lo encuentra,
+      así que analiza <b>salidas de inventario</b> (<code>stock.move.line</code>): el «folio» es la entrega de almacén, el «hospital» la ubicación de
+      destino, y no hay médico, auxiliar ni básculas. Las reglas <em>sin cirugía</em> y <em>duplicado</em> y los avisos de facturación quedan
+      desactivados hasta que lo detecte.
+      {% if usuario and usuario.rol in ('admin','condor') %}<a href="/configuracion#mapeo">Configuración ▸ Re-descubrir</a> vuelve a buscarlo automáticamente.{% else %}Avisa a Ingeniería Cóndor.{% endif %}
+    </div>
+    {% endif %}
+    {% if presupuesto_ia and presupuesto_ia.agotado %}
+    <div class="alerta bad" style="margin:0 0 14px"><b>⛔ Presupuesto mensual de IA agotado</b> ({{ presupuesto_ia.periodo }}: {{ '{:,}'.format(presupuesto_ia.tokens_entrada) }} de {{ '{:,}'.format(presupuesto_ia.presupuesto_entrada) }} tokens de entrada, {{ '{:,}'.format(presupuesto_ia.tokens_salida) }} de {{ '{:,}'.format(presupuesto_ia.presupuesto_salida) }} de salida). Los agentes y el chat están detenidos hasta que se compren más tokens: contacta a Ingeniería Cóndor para ampliar el paquete.{% if usuario and usuario.rol == 'condor' %} <a href="/configuracion#presupuesto">Ampliar el paquete</a>.{% endif %}</div>
+    {% elif presupuesto_ia and presupuesto_ia.aviso %}
+    <div class="alerta warn" style="margin:0 0 14px"><b>⚠️ Presupuesto de IA al {{ presupuesto_ia.pct_max }} %</b> del paquete mensual ({{ presupuesto_ia.periodo }}). Al llegar al 100 % los agentes y el chat se detendrán hasta comprar más tokens; si hace falta, avisa a Ingeniería Cóndor con tiempo.</div>
+    {% endif %}
+    {% if llm_fallo %}
+    <div class="alerta bad" style="margin:0 0 14px"><b>⚠️ La IA falló en la última llamada</b> ({{ llm_fallo.origen }} · {{ (llm_fallo.fecha or '')[:16].replace('T',' ') }}): {{ llm_fallo.error }}. Lo generado en ese paso es determinista (sin razonamiento del modelo); vuelve a ejecutar cuando se resuelva.{% if usuario and usuario.rol == 'condor' %} Revisa la bitácora y la API key/modelo en Render.{% endif %}</div>
+    {% endif %}
+    {% block contenido %}{% endblock %}
+  </main>
+</div>
+<div id="toast" class="toast"></div>
+<div id="progreso" class="progreso"><b id="progreso-titulo">Trabajando…</b><ol id="progreso-pasos"></ol></div>
+{% if usuario and not request.url.path.startswith('/copiloto') %}
+{# Chat global: en TODAS las pantallas (salvo el propio Copiloto) se puede conversar con los agentes; el contexto es la pantalla, el agente o el caso #}
+<button id="chat-boton" class="chat-boton" onclick="chatGlobalToggle()" title="Conversar con los agentes">💬 Hablar con los agentes</button>
+<div id="chat-global" class="chat-global" data-contexto='{{ chat_global|tojson }}' hidden>
+  <div class="cg-head"><b id="cg-titulo">Agentes CBH</b><span class="txt-sm txt-muted" id="cg-modo">{{ 'con Claude' if llm else 'modo determinista' }}</span><button class="cg-cerrar" onclick="chatGlobalToggle()" aria-label="Cerrar">×</button></div>
+  <div class="cg-sug" id="cg-sug"></div>
+  <div class="mensajes" id="cg-mensajes"></div>
+  <div class="pensando" id="cg-pensando" style="display:none">Pensando…</div>
+  <div class="compositor"><textarea id="cg-texto" placeholder="Pregunta sobre lo que ves en esta pantalla… (Enter para enviar)"></textarea><button class="btn" id="cg-enviar" onclick="chatGlobalEnviar()"><span class="spin"></span>Enviar</button></div>
+</div>
+{% endif %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

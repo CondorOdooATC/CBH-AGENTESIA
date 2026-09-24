@@ -1,0 +1,108 @@
+{% extends "base.html" %}{% block titulo %}Hoy{% endblock %}
+{% block contenido %}
+{% set k1 = a1.kpis or {} %}{% set k2 = a2.kpis or {} %}
+<div class="topbar">
+  <div><h1>Hoy</h1><div class="sub">Lo que los agentes encontraron, lo que proponen y lo que tú decides · {{ cliente }}</div></div>
+  <div class="acciones"><span class="chip {{ 'ok' if odoo.ok else 'bad' }}">Odoo: {{ 'conectado' if odoo.ok else 'sin conexión' }}</span><span class="chip odoo">Autonomía nivel {{ nivel }}</span></div>
+</div>
+
+<div class="card" style="padding:12px 14px;margin-bottom:14px">
+  <div class="pregunta"><input id="pregunta" placeholder="Pregúntale a los agentes… {% if nombres.producto %}«¿por qué subió {{ nombres.producto }}?», {% endif %}{% if nombres.hospital %}«dame un Excel del consumo de {{ nombres.hospital }} este mes», {% endif %}{% if nombres.proveedor %}«¿qué pasa si {{ nombres.proveedor }} se retrasa una semana?»{% else %}«¿qué está en riesgo de desabasto esta semana?»{% endif %}" onkeydown="if(event.key==='Enter') preguntar(this.value)"><button class="btn" onclick="preguntar($('#pregunta').value)">Preguntar</button></div>
+</div>
+
+<div class="agentes mb">
+  {% for clave, nombre, ruta, clase, ag in [('consumo','Agente · Control de consumo','/agentes/consumo','', agentes.consumo), ('demanda','Agente · Abasto y demanda','/agentes/demanda','teal', agentes.demanda), ('vigilancia','Vigilancia continua','/acciones?estado=pendientes','gris', agentes.vigilancia)] %}
+  <div class="card agente {{ clase }}">
+    <div class="nombre"><span class="pulso {{ 'run' if ag.corriendo else ('off' if not ag.ultima else '') }}"></span>{{ nombre }}</div>
+    <div class="dice">{{ ag.resumen }}</div>
+    <div class="meta">{% if ag.corriendo %}Trabajando ahora…{% elif ag.ultima %}Última revisión {{ ag.ultima[:16].replace('T',' ') }}{% else %}Aún no ha corrido{% endif %}{% if ag.proxima %} · próxima {{ ag.proxima[:16] }}{% endif %}</div>
+    <div class="cta"><a class="btn sm sec" href="{{ ruta }}">Ver</a>{% if usuario.rol != 'consulta' %}<button class="btn sm {{ 'teal' if clase=='teal' else '' }}" onclick="ejecutarAgente('{{ clave }}', this)"><span class="spin"></span>{{ 'Revisar ahora' if clave=='vigilancia' else 'Actualizar análisis' }}</button>{% endif %}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="dinero mb">
+  <div class="d"><div class="l">Sujeto a revisión</div><div class="v" style="color:var(--warn)">${{ '{:,.0f}'.format(exposicion.sujeto_a_revision or 0) }}</div><div class="txt-sm txt-muted">{{ exposicion.n_revision }} hallazgos abiertos</div></div>
+  <div class="d"><div class="l">Pérdida confirmada</div><div class="v" style="color:var(--bad)">${{ '{:,.0f}'.format(exposicion.confirmado or 0) }}</div><div class="txt-sm txt-muted">{{ exposicion.n_confirmado }} confirmados</div></div>
+  <div class="d"><div class="l">Aclarado</div><div class="v" style="color:var(--ok)">${{ '{:,.0f}'.format(exposicion.aclarado or 0) }}</div><div class="txt-sm txt-muted">{{ exposicion.n_aclarado }} justificados</div></div>
+  <div class="d"><div class="l">Compra sugerida</div><div class="v" style="color:var(--teal)">${{ '{:,.0f}'.format(k2.importe_compra or 0) }}</div><div class="txt-sm txt-muted">{{ k2.productos_por_comprar or 0 }} productos · {{ k2.desabasto or 0 }}+{{ k2.critico or 0 }} en riesgo</div></div>
+  <div class="d"><div class="l">Caducidad en riesgo</div><div class="v" style="color:var(--odoo)">${{ '{:,.0f}'.format(k2.caducidad_riesgo or 0) }}</div><div class="txt-sm txt-muted">{{ k2.lotes_riesgo or 0 }} lotes · exceso ${{ '{:,.0f}'.format(k2.valor_exceso or 0) }}</div></div>
+</div>
+
+<div class="grid" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr)">
+  <div>
+    <div class="seccion" style="margin-top:0"><h2>Lo que decido hoy <span class="r">{{ n_pendientes }} pendientes · <a href="/acciones">ver todas</a></span></h2>
+      {% if decisiones %}<div class="grid g3">
+      {% for a in decisiones %}{% set i = a.impacto or {} %}
+      <div class="decision">
+        <div><span class="badge {{ a.riesgo }}">riesgo {{ a.riesgo }}</span> <span class="chip">{{ a.agente }}</span> {% if a.estado!='propuesta' %}<span class="badge {{ a.estado }}">{{ a.estado }}</span>{% endif %}</div>
+        <h3>{{ a.titulo }}</h3>
+        {% if a.efecto %}<div class="efecto">▶ {{ a.efecto }}</div>{% endif %}
+        {% set c_antes = i.get('cobertura_destino_antes') if i.get('cobertura_destino_antes') is not none else i.get('cobertura_red_antes') %}
+        {% set c_despues = i.get('cobertura_destino_despues') if i.get('cobertura_destino_despues') is not none else i.get('cobertura_red_despues') %}
+        {% if c_antes is not none or c_despues is not none %}
+        <div class="antes-despues"><div class="col"><b>Sin intervención</b>{{ c_antes|dias }} de cobertura</div><div class="flecha">→</div><div class="col"><b>Con esta acción</b>{{ c_despues|dias }} de cobertura</div></div>
+        {% endif %}
+        {% if a.tipo == 'aviso_equipo' %}{% set p = a.payload or {} %}<div class="txt-sm">👥 {{ p.get('equipo_nombre') or p.get('equipo') }}: {{ (p.get('destinatarios') or [])|join(', ') or 'sin destinatarios en Odoo' }}</div>{% endif %}
+        <p class="txt-sm txt-muted" style="margin:0">{{ a.motivo }}</p>
+        {% if a.revalidacion %}<div class="alerta warn" style="margin:0">{{ a.revalidacion }}</div>{% endif %}
+        <div class="pie">{% if usuario.rol != 'consulta' %}<button class="btn sm ok" onclick="accion({{ a.id }},'aprobar')">Aprobar</button><button class="btn sm ghost" onclick="accion({{ a.id }},'rechazar', prompt('Motivo (el agente aprende de esto):')||'')">Rechazar</button>{% endif %}<span class="imp">{% if i.importe %}${{ '{:,.0f}'.format(i.importe) }}{% endif %}</span></div>
+      </div>{% endfor %}</div>
+      {% else %}<div class="card txt-muted">No hay decisiones pendientes. Cuando los agentes propongan algo aparecerá aquí con su efecto exacto y el antes/después.</div>{% endif %}
+    </div>
+
+    <div class="seccion"><h2>Lo que los agentes encontraron <span class="r"><a href="/casos">todos los casos</a></span></h2>
+      {% if casos %}<div class="grid g2">
+      {% for c in casos %}{% set e = c.expediente or {} %}
+      <div class="caso {{ c.severidad }}">
+        <div><span class="badge {{ c.severidad }}">{{ c.severidad }}</span> <span class="chip">{{ c.tipo }}</span> <span class="chip {{ 'ok' if c.investigado_con.startswith('claude') else '' }}">{{ 'investigado por Claude' if c.investigado_con.startswith('claude') else 'expediente determinista' }}</span></div>
+        <h3>{{ c.titulo }}</h3>
+        {% set concl = (c.conclusion or e.que_paso or '') %}
+        <div class="resumen-caso"><b>Conclusión{% if c.confianza %} ({{ c.confianza }}){% endif %}:</b> {{ concl[:160] }}{{ '…' if concl|length > 160 }}</div>
+        {% if c.accion_recomendada %}<div class="resumen-caso" style="margin-top:6px"><b>Qué hacer:</b> {{ c.accion_recomendada[:140] }}{{ '…' if c.accion_recomendada|length > 140 }}{% if c.responsable %} <span class="txt-muted">· {{ c.responsable }}</span>{% endif %}</div>{% endif %}
+        <div style="margin-top:6px"><button class="ver-mas" onclick="verMas(this)">Ver más ▾</button></div>
+        <div class="detalle-caso" hidden>
+          <div class="q">Qué pasó</div><p>{{ e.que_paso or '' }}</p>
+          {% if e.hipotesis %}<div class="q">Hipótesis por verificar</div>{% for h in e.hipotesis %}<div class="hip"><span class="badge {{ 'alta' if h.plausibilidad=='alta' else ('media' if h.plausibilidad=='media' else 'baja') }}" style="text-transform:none">{{ h.plausibilidad }}</span><span style="flex:1">{{ h.hipotesis }}</span></div>{% endfor %}{% endif %}
+          {% if c.conclusion %}<div class="q">Conclusión completa</div><p>{{ c.conclusion }}</p>{% endif %}
+          {% if c.accion_recomendada %}<div class="q">Acción recomendada</div><p>{{ c.accion_recomendada }}{% if c.responsable %} — <i>{{ c.responsable }}</i>{% endif %}</p>{% endif %}
+        </div>
+        <div class="pie" style="display:flex;gap:6px;align-items:center;margin-top:6px"><a class="btn sm sec" href="/casos/{{ c.id }}">Ver expediente</a><button class="btn sm ghost" onclick="preguntar('Explícame el caso #{{ c.id }} y qué debo verificar primero')">Preguntar</button><span style="margin-left:auto;font-weight:700;color:var(--bad)">${{ '{:,.0f}'.format(c.impacto_mxn or 0) }}</span></div>
+      </div>{% endfor %}</div>
+      {% else %}<div class="card txt-muted">Aún no hay expedientes. Ejecuta el Agente de consumo para que investigue los casos de mayor impacto.</div>{% endif %}
+    </div>
+
+    {% if plan and (plan.decisiones or plan.riesgos) %}
+    <div class="seccion"><h2>Lo que el agente de abasto anticipa <span class="r">{{ 'razonado por Claude' if (plan.modo or '').startswith('claude') else 'reglas de anticipación' }}</span></h2>
+      <div class="card">
+        <p style="margin:0 0 8px">{{ plan.resumen }}</p>
+        <div class="grid g2">
+          <div><h3>Decisiones</h3><ul class="lista-riesgos">{% for d in plan.decisiones[:5] %}<li><b>{{ d.decision }}</b> — {{ d.por_que }}{% if d.impacto %} <span class="txt-muted">({{ d.impacto }})</span>{% endif %}</li>{% else %}<li class="txt-muted">Sin ajustes al plan base.</li>{% endfor %}</ul></div>
+          <div><h3>Riesgos con fecha</h3><ul class="lista-riesgos">{% for r in plan.riesgos[:5] %}<li>{{ r.riesgo }}{% if r.fecha_estimada %} · <b>{{ r.fecha_estimada }}</b>{% endif %}{% if r.mitigacion %} <span class="txt-muted">— {{ r.mitigacion }}</span>{% endif %}</li>{% endfor %}</ul>
+            {% if plan.lo_que_el_modelo_no_ve %}<h3>Lo que el pronóstico no ve</h3><ul class="lista-riesgos">{% for n in plan.lo_que_el_modelo_no_ve[:4] %}<li>{{ n }}</li>{% endfor %}</ul>{% endif %}</div>
+        </div>
+      </div>
+    </div>{% endif %}
+
+    <details class="seccion"><summary>Briefing ejecutivo {{ '· ' + briefing.fecha[:16].replace('T',' ') if briefing.fecha else '' }}</summary>
+      <div class="card mt">{% if briefing.texto %}<div class="md" data-md="{{ briefing.texto|e }}"></div>{% else %}<p class="txt-muted">Genera el briefing desde los agentes.</p>{% endif %}
+      {% if usuario.rol != 'consulta' %}<button class="btn sec sm" onclick="ejecutarAgente('briefing', this)"><span class="spin"></span>Redactar briefing</button>{% endif %}</div>
+    </details>
+  </div>
+
+  <div>
+    <div class="card"><h2>Actividad de los agentes <span class="r" id="feed-r">en vivo</span></h2>
+      <div class="feed" id="feed">{% for e in actividad %}<div class="ev"><span class="ic">{{ e.icono }}</span><div><div>{{ e.texto }}</div>{% if e.detalle %}<div class="d">{{ e.detalle }}</div>{% endif %}</div><span class="t" style="margin-left:auto">{{ e.ts[11:16] }}</span></div>{% else %}<div class="txt-muted">Sin actividad todavía.</div>{% endfor %}</div>
+    </div>
+    {% if vigilancia and vigilancia.resumen %}<div class="card mt"><h2>Vigilancia <span class="r">{{ vigilancia.fecha[:16].replace('T',' ') }}</span></h2>
+      <ul class="lista-riesgos">{% for k, v in vigilancia.resumen.items() if v %}<li>{{ k.replace('_',' ') }}: <b>{{ v }}</b></li>{% endfor %}</ul>
+      {% for a in (vigilancia.nuevas_alertas or [])[:5] %}<div class="txt-sm">• {{ a.titulo }}</div>{% endfor %}
+      {% if vigilancia.lectura %}<div class="md mt" data-md="{{ vigilancia.lectura|e }}"></div>{% endif %}</div>{% endif %}
+    <div class="card mt txt-sm txt-muted">Claude: {{ uso.pct_entrada }}% del presupuesto mensual · ${{ uso.costo_usd }} USD</div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script>
+async function refrescarFeed(){ try{ const r=await api('/api/actividad'); const f=$('#feed'); if(!f) return; f.innerHTML=r.actividad.map(e=>`<div class="ev"><span class="ic">${e.icono}</span><div><div>${esc(e.texto)}</div>${e.detalle?'<div class="d">'+esc(e.detalle)+'</div>':''}</div><span class="t" style="margin-left:auto">${e.ts.slice(11,16)}</span></div>`).join('')||'<div class="txt-muted">Sin actividad.</div>'; }catch(e){} }
+setInterval(refrescarFeed, 15000);
+</script>{% endblock %}

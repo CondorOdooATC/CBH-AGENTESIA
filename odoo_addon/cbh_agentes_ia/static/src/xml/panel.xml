@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+  <t t-name="cbh_agentes_ia.Panel">
+    <div class="o_cbh_agentes_panel d-flex flex-column h-100 w-100">
+      <iframe t-att-src="url" title="Agentes de IA" style="flex:1;border:0;width:100%;min-height:calc(100vh - 60px)" allow="clipboard-write"/>
+    </div>
+  </t>
+</templates>

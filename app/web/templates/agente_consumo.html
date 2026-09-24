@@ -1,0 +1,54 @@
+{% extends "base.html" %}{% block titulo %}Agente · Consumo{% endblock %}
+{% block contenido %}
+{% set k = a1.kpis or {} %}{% set b = k.basculas or {} %}
+<div class="topbar">
+  <div><h1>Agente · Control inteligente de consumo</h1><div class="sub">Investiga diferencias no conciliadas, básculas, lotes y patrones · corrida #{{ a1.corrida_id or '—' }} · {{ a1.fecha[:16].replace('T',' ') if a1.fecha else 'sin ejecutar' }}{% if a1.segundos %} · <span title="{% for t in (a1.tiempos or []) %}{{ t.paso }}: {{ t.segundos }} s&#10;{% endfor %}">{{ a1.segundos }} s{% if a1.tiempos %} ({% for t in (a1.tiempos|sort(attribute='segundos', reverse=true))[:3] %}{{ t.paso|lower|truncate(38, true, '…') }} {{ t.segundos|round|int }} s{{ ', ' if not loop.last }}{% endfor %}){% endif %}</span>{% endif %}</div></div>
+  <div class="acciones">
+    {% if a1.reporte %}<a class="btn sec" href="{{ a1.reporte.url }}">⬇ Excel completo</a>{% endif %}
+    {% if usuario.rol != 'consulta' %}<input id="dias" type="number" value="180" min="30" max="730" style="width:90px" title="Días de historia"><button class="btn" onclick="ejecutarAgente('consumo', this, {dias: +(document.querySelector('#dias').value||180)})"><span class="spin"></span>Actualizar análisis</button>{% endif %}
+  </div>
+</div>
+<div class="card agente mb"><div class="nombre"><span class="pulso {{ 'run' if agente.corriendo else ('off' if not agente.ultima else '') }}"></span>Lo que encontré</div><div class="dice">{{ agente.resumen }}</div>
+  <div class="meta">Analicé {{ '{:,}'.format(k.lineas or 0) }} líneas · {{ k.hallazgos or 0 }} hallazgos ({{ k.criticos or 0 }} críticos, {{ k.altos or 0 }} altos, {{ k.medios or 0 }} medios; {{ k.nuevos or 0 }} nuevos) · {{ k.patrones or 0 }} patrones · básculas: {{ '{:,}'.format(b.lineas_con_bascula or 0) }} pesajes, {{ b.discrepancias or 0 }} discrepancias, {{ b.imposibles or 0 }} lecturas inconsistentes, {{ '{:,.1f}'.format(b.gramos_no_explicados or 0) }} g sin explicar
+  {% if a1.modo_respaldo %}<br><span class="chip warn">corrida en modo de respaldo</span> fuente <code>{{ a1.origen_datos or 'stock.move.line' }}</code> · reglas desactivadas: {{ (a1.reglas_desactivadas or [])|join(', ') or '—' }}{% elif a1.origen_datos %}<br>fuente <code>{{ a1.origen_datos }}</code>{% if a1.reglas_desactivadas %} · reglas desactivadas por política: {{ a1.reglas_desactivadas|join(', ') }}{% endif %}{% endif %}</div></div>
+<div class="dinero mb">
+  <div class="d"><div class="l">Sujeto a revisión</div><div class="v" style="color:var(--warn)">${{ '{:,.0f}'.format(exposicion.sujeto_a_revision or 0) }}</div><div class="txt-sm txt-muted">{{ exposicion.n_revision }} hallazgos</div></div>
+  <div class="d"><div class="l">Pérdida confirmada</div><div class="v" style="color:var(--bad)">${{ '{:,.0f}'.format(exposicion.confirmado or 0) }}</div></div>
+  <div class="d"><div class="l">Aclarado</div><div class="v" style="color:var(--ok)">${{ '{:,.0f}'.format(exposicion.aclarado or 0) }}</div></div>
+  <div class="d"><div class="l">Patrones (importe adicional)</div><div class="v">${{ '{:,.0f}'.format(k.importe_patrones or 0) }}</div><div class="txt-sm txt-muted">sin duplicar líneas ya señaladas</div></div>
+  <div class="d"><div class="l">Expedientes</div><div class="v teal">{{ (a1.casos or [])|length }}</div><div class="txt-sm txt-muted">investigados esta corrida</div></div>
+</div>
+{% if not a1 %}<div class="card"><p>Este agente aún no ha corrido. Pulsa <b>Actualizar análisis</b>: leerá el consumo de Odoo, construirá los perfiles, detectará diferencias, investigará los casos de mayor impacto y redactará el informe.</p></div>{% else %}
+{% set chat_titulo = 'Agente · Control de consumo' %}{% set chat_contexto = {'agente': 'consumo'} %}
+{% set chat_sugerencias = ['¿Qué encontraste hoy y qué verifico primero?', ('¿Por qué señalaste a ' ~ k.top_riesgo_hospital ~ '?') if k.top_riesgo_hospital else '¿Qué unidad concentra más riesgo y por qué?', '¿Qué hallazgos ya tienen aclaración de una persona?', '¿Qué casos tienen riesgo de facturación al IMSS?'] %}
+{% include '_chat.html' %}
+<div class="seccion"><h2>Casos investigados <span class="r"><a href="/casos">todos</a></span></h2>
+  <div class="grid g3">{% for c in casos[:6] %}{% set e = c.expediente or {} %}
+  <div class="caso {{ c.severidad }}"><div><span class="badge {{ c.severidad }}">{{ c.severidad }}</span> <span class="chip">{{ c.tipo }}</span> <span class="badge {{ 'ok' if c.estado=='resuelto' else 'nueva' }}">{{ c.estado }}</span></div>
+    <h3><a href="/casos/{{ c.id }}">{{ c.titulo }}</a></h3><div class="q">Qué pasó</div><p>{{ (e.que_paso or '')[:160] }}</p>
+    {% for h in (e.hipotesis or [])[:1] %}<div class="hip"><span class="badge media" style="text-transform:none">{{ h.plausibilidad }}</span><span style="flex:1">{{ h.hipotesis }}</span></div>{% endfor %}
+    <div class="q">Acción</div><p>{{ (c.accion_recomendada or '')[:140] }} <span class="txt-muted">· {{ c.responsable }}</span></p></div>{% else %}<div class="card txt-muted">Sin expedientes todavía.</div>{% endfor %}</div></div>
+
+<div class="grid g2 mt">
+  <div class="card"><details open><summary>Informe del agente</summary><div class="md mt" data-md="{{ a1.informe|e }}"></div></details></div>
+  <div>
+    <div class="card mb"><h2>Patrones</h2>
+      {% for p in a1.agregados or [] %}<div style="border-left:3px solid {{ '#DC3545' if p.severidad=='critica' else '#E46E78' if p.severidad=='alta' else '#F0AD4E' }};padding:6px 10px;margin:6px 0;background:#FAFAFA;border-radius:0 6px 6px 0"><span class="badge {{ p.severidad }}">{{ p.severidad }}</span> <b>{{ p.regla }}</b> · {{ p.producto }} · <span class="txt-muted">{{ p.clave }}</span><br><span class="txt-sm">{{ p.motivo }}</span> <span class="txt-sm" style="color:var(--bad)">${{ '{:,.0f}'.format(p.importe_riesgo or 0) }}</span></div>{% else %}<p class="txt-muted">Sin patrones agregados.</p>{% endfor %}</div>
+    <div class="card mb"><h2>Dónde se concentra la diferencia</h2><p class="txt-sm txt-muted" style="margin-top:-4px">Índice 0-100 de hallazgos por volumen; no es una acusación, es dónde verificar primero.</p>
+      <div class="grid g2">{% for dim, titulo in [('auxiliar','Auxiliares'),('medico','Médicos'),('hospital','Unidades'),('subalmacen','Sub-almacenes')] %}
+        <div><h3>{{ titulo }}</h3>{% for r in ((a1.riesgos or {}).get(dim) or [])[:6] %}<div style="display:flex;gap:8px;align-items:center;margin:3px 0;font-size:13px"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.clave }}</span><span class="txt-sm txt-muted">{{ r.hallazgos }} hall.</span><div class="mini-bar" style="width:70px"><i style="width:{{ r.indice }}%;background:{{ '#DC3545' if r.indice>60 else ('#F0AD4E' if r.indice>30 else '#017E84') }}"></i></div><b style="width:34px;text-align:right">{{ r.indice }}</b></div>{% endfor %}</div>{% endfor %}</div></div>
+  </div>
+</div>
+<details class="seccion"><summary>Tendencias y comparativos históricos</summary>
+<div class="grid g2 mt"><div class="card"><h3>Tendencia mensual por producto</h3><div class="scroll" style="max-height:320px"><table class="tabla"><thead><tr><th>Producto</th><th class="num">Tend. %/mes</th><th class="num">Prom. 3m prev.</th><th class="num">Prom. últ. 3m</th><th class="num">Var. %</th></tr></thead><tbody>
+{% for t in (a1.historico or {}).tendencias_producto or [] %}<tr><td>{{ t.producto }}</td><td class="num">{{ t.tendencia_pct_mes }}</td><td class="num">{{ t.prom_3m_previos }}</td><td class="num">{{ t.prom_ult_3m }}</td><td class="num" style="color:{{ '#DC3545' if (t.variacion_pct or 0) > 15 else ('#28A745' if (t.variacion_pct or 0) < -15 else 'inherit') }}">{{ t.variacion_pct }}</td></tr>{% endfor %}</tbody></table></div></div>
+<div class="card"><h3>Últimos 30 días vs. 30 anteriores por unidad</h3><table class="tabla"><thead><tr><th>Unidad</th><th class="num">Importe 30d</th><th class="num">30d prev.</th><th class="num">Var. %</th><th class="num">$/folio</th></tr></thead><tbody>
+{% for c in (a1.historico or {}).comparativo_hospital or [] %}<tr><td>{{ c.hospital }}</td><td class="num">${{ '{:,.0f}'.format(c.importe_30d) }}</td><td class="num">${{ '{:,.0f}'.format(c.importe_30d_prev) }}</td><td class="num">{{ c.variacion_pct }}</td><td class="num">{{ c.importe_por_folio }}</td></tr>{% endfor %}</tbody></table></div></div></details>
+<details class="seccion"><summary>Hallazgos de esta corrida (detalle) · {{ hallazgos|length }}</summary>
+<div class="card mt"><div class="scroll"><table class="tabla"><thead><tr><th>Sev.</th><th>Fecha</th><th>Folio</th><th>Unidad</th><th>Médico</th><th>Producto</th><th class="num">Cant.</th><th class="num">Esperado</th><th class="num">En revisión $</th><th>Motivos</th><th>Estado</th>{% if usuario.rol != 'consulta' %}<th></th>{% endif %}</tr></thead><tbody>
+{% for h in hallazgos %}<tr><td><span class="badge {{ h.severidad }}">{{ h.severidad }}</span></td><td class="mini">{{ (h.fecha or '')[:16] }}</td><td>{{ h.folio }}</td><td>{{ h.hospital }}</td><td class="mini">{{ h.medico or 'no registrado' }}</td><td>{{ h.producto }}<div class="mini">{{ h.lote }}</div></td><td class="num">{{ h.cantidad|cant(h.unidad) }}</td><td class="num">{{ h.esperado|cant(h.unidad) if h.esperado is not none else '—' }}</td><td class="num">${{ '{:,.0f}'.format(h.importe_riesgo or 0) }}</td><td class="mini">{{ h.motivos|replace('["','')|replace('"]','')|replace('", "',' | ') }}</td><td><span class="badge {{ h.estado }}">{{ h.estado }}</span></td>
+{% if usuario.rol != 'consulta' %}<td style="white-space:nowrap"><button class="btn sm sec" onclick="api('/api/casos/investigar/{{ h.id }}','POST').then(r=>location.href='/casos/'+r.caso_id).catch(e=>toast('Error: '+e.message,8000))">Investigar</button> <button class="btn sm ok" onclick="clasificar({{ h.id }},'justificada')">Justificar</button> <button class="btn sm bad" onclick="clasificar({{ h.id }},'confirmada')">Confirmar</button></td>{% endif %}</tr>{% endfor %}</tbody></table></div></div></details>
+<details class="seccion"><summary>Historial de corridas</summary><div class="card mt"><table class="tabla"><thead><tr><th>#</th><th>Estado</th><th>Disparo</th><th>Inicio</th><th class="num">Seg.</th><th>Resumen</th></tr></thead><tbody>
+{% for c in corridas %}<tr><td>{{ c.id }}</td><td><span class="badge {{ 'ok' if c.estado=='ok' else 'error' }}">{{ c.estado }}</span></td><td>{{ c.disparo }}</td><td class="mini">{{ c.inicio[:16].replace('T',' ') }}</td><td class="num">{{ '%.0f'|format(c.duracion_seg or 0) }}</td><td class="mini">{{ c.resumen or c.error }}</td></tr>{% endfor %}</tbody></table></div></details>
+{% endif %}
+{% endblock %}

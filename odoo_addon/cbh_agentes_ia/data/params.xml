@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <data noupdate="1">
+    <record id="param_url" model="ir.config_parameter">
+      <field name="key">cbh_agentes_ia.url</field>
+      <field name="value"></field>
+    </record>
+    <record id="param_modo" model="ir.config_parameter">
+      <field name="key">cbh_agentes_ia.modo</field>
+      <field name="value">pestana</field>
+    </record>
+  </data>
+</odoo>

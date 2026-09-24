@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <data noupdate="0">
+    <record id="module_category_agentes_ia" model="ir.module.category">
+      <field name="name">Agentes de IA · CBH</field>
+      <field name="description">Acceso a la plataforma de Agentes de IA (Ingeniería Cóndor)</field>
+      <field name="sequence">60</field>
+    </record>
+
+    <record id="privilege_agentes_ia" model="res.groups.privilege">
+      <field name="name">Agentes de IA</field>
+      <field name="category_id" ref="module_category_agentes_ia"/>
+      <field name="sequence">10</field>
+    </record>
+
+    <record id="group_consulta" model="res.groups">
+      <field name="name">Consulta</field>
+      <field name="privilege_id" ref="privilege_agentes_ia"/>
+      <field name="sequence">10</field>
+      <field name="comment">Ve informes, casos y decisiones; conversa con los agentes. No aprueba ni ejecuta.</field>
+    </record>
+    <record id="group_operacion" model="res.groups">
+      <field name="name">Operación</field>
+      <field name="privilege_id" ref="privilege_agentes_ia"/>
+      <field name="sequence">20</field>
+      <field name="implied_ids" eval="[(4, ref('group_consulta'))]"/>
+      <field name="comment">Aprueba y rechaza propuestas, resuelve casos, ejecuta agentes.</field>
+    </record>
+    <record id="group_admin" model="res.groups">
+      <field name="name">Administrador</field>
+      <field name="privilege_id" ref="privilege_agentes_ia"/>
+      <field name="sequence">30</field>
+      <field name="implied_ids" eval="[(4, ref('group_operacion'))]"/>
+      <field name="comment">Además: segunda aprobación de riesgo alto, políticas y usuarios. El rol «condor» (configuración del modelo de lenguaje) sólo lo asigna Ingeniería Cóndor en la plataforma.</field>
+    </record>
+  </data>
+</odoo>

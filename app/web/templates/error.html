@@ -1,0 +1,4 @@
+{% extends "base.html" %}{% block titulo %}Error {{ codigo or '' }}{% endblock %}
+{% block contenido %}<div class="card"><h1>{{ 'Error ' ~ codigo if codigo else 'No se pudo continuar' }}</h1><p>{{ detalle or mensaje }}</p>
+{% if sso_reintento %}<p><a class="btn" href="{{ sso_reintento }}">Volver a abrir desde Odoo</a></p>{% endif %}
+{% if usuario %}<a class="btn sec" href="/">Volver al panel</a>{% else %}<a class="btn sec" href="/login">Ir al acceso</a>{% endif %}</div>{% endblock %}

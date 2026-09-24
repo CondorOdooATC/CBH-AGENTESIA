@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block titulo %}Bitácora{% endblock %}
+{% block contenido %}
+<div class="topbar"><div><h1>Bitácora</h1><div class="sub">Todo lo que hacen los agentes queda registrado y persiste entre despliegues</div></div>
+<div class="acciones">{% for n in ['info','warn','error'] %}<a class="chip {{ 'odoo' if nivel_filtro==n }}" href="/bitacora?nivel={{ n }}">{{ n }}</a>{% endfor %}<a class="chip {{ 'odoo' if not nivel_filtro }}" href="/bitacora">todos</a></div></div>
+<div class="grid g3 mb">
+  <div class="card kpi"><div class="l">Tokens de entrada (mes)</div><div class="v teal">{{ uso.pct_entrada }}%</div><div class="s">{{ '{:,}'.format(uso.tokens_entrada) }} de {{ '{:,}'.format(uso.presupuesto_entrada) }}</div><div class="mini-bar mt"><i style="width:{{ [uso.pct_entrada,100]|min }}%"></i></div></div>
+  <div class="card kpi"><div class="l">Tokens de salida (mes)</div><div class="v teal">{{ uso.pct_salida }}%</div><div class="s">{{ '{:,}'.format(uso.tokens_salida) }} de {{ '{:,}'.format(uso.presupuesto_salida) }}</div><div class="mini-bar mt"><i style="width:{{ [uso.pct_salida,100]|min }}%"></i></div></div>
+  <div class="card kpi"><div class="l">Costo estimado (mes)</div><div class="v">${{ uso.costo_usd }} USD</div><div class="s">{{ uso.llamadas }} llamadas a Claude</div></div>
+</div>
+<div class="card"><div class="scroll" style="max-height:70vh"><table class="tabla"><thead><tr><th>Fecha</th><th>Nivel</th><th>Origen</th><th>Evento</th><th>Detalle</th><th>Usuario</th></tr></thead><tbody>
+{% for e in eventos %}<tr><td class="mini">{{ e.ts[:19].replace('T',' ') }}</td><td><span class="badge {{ 'ok' if e.nivel=='info' else ('media' if e.nivel=='warn' else 'error') }}">{{ e.nivel }}</span></td><td class="mini">{{ e.origen }}</td><td>{{ e.evento }}</td><td class="mini">{{ e.detalle }}</td><td class="mini">{{ e.usuario or '' }}</td></tr>{% endfor %}</tbody></table></div></div>
+{% endblock %}

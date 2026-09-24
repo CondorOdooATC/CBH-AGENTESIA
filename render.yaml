@@ -1,0 +1,134 @@
+# ═══════════════════════════════════════════════════════════════════════════
+#  Render Blueprint — CBH · Agentes de IA
+#  Dos servicios desde el mismo repositorio:
+#    • cbh-agentes-staging  ← rama "staging"  → Odoo CBHTEST (staging de Odoo.sh)
+#    • cbh-agentes-ia       ← rama "main"     → Odoo CBH1 (producción)
+#  Deploy: Render Dashboard ▸ New ▸ Blueprint ▸ conectar el repo ▸ Apply.
+#  Después, en cada servicio ▸ Environment, capturar las variables marcadas sync:false.
+# ═══════════════════════════════════════════════════════════════════════════
+services:
+  - type: web
+    name: cbh-agentes-staging
+    runtime: python
+    plan: starter               # 0.5 CPU / 512 MB (≈ $7 USD/mes); "free" también sirve para pruebas cortas (se duerme y tiene poca memoria)
+    region: oregon
+    branch: staging
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: cbh-datos-staging
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: APP_ENV
+        value: staging
+      - key: DATA_DIR
+        value: /data
+      - key: TZ
+        value: America/Mexico_City
+      - key: CONSUMO_CACHE_SEG
+        value: "3600"            # una sola lectura de consumo cuando los agentes corren seguidos
+      - key: ODOO_LECTURAS_PARALELAS
+        value: "2"               # staging de Odoo.sh tiene pocos workers: 2 conexiones a la vez
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_USER
+        value: condor            # usuario local de Ingeniería Cóndor (rol condor); el cliente entra desde Odoo
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SSO_SECRET
+        sync: false            # Odoo ▸ Ajustes ▸ Agentes de IA ▸ Secreto compartido (lo genera el módulo al instalarse)
+      - key: EMBED_ORIGINS
+        sync: false            # vacío = pestaña nueva; URL de Odoo (https://…odoo.com) sólo si se usa el modo embebido
+      - key: ODOO_URL
+        sync: false            # p.ej. https://cbticket2-0-cbhtest-XXXXX.dev.odoo.com
+      - key: ODOO_DB
+        sync: false
+      - key: ODOO_USER
+        sync: false
+      - key: ODOO_API_KEY
+        sync: false
+      - key: ODOO_COMPANY_ID
+        sync: false            # id de la compañía CBH+ (lo muestra Odoo ▸ Ajustes ▸ Agentes de IA ▸ Datos para Render)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-5   # en staging conviene el modelo rápido para ahorrar tokens
+      - key: ANTHROPIC_MODEL_FAST
+        value: claude-sonnet-5
+      - key: SCHEDULE_ENABLED
+        value: "false"           # en staging las corridas se disparan a mano
+      - key: DEMO_MODE
+        value: "false"
+
+  - type: web
+    name: cbh-agentes-ia
+    runtime: python
+    plan: standard              # 1 CPU / 2 GB (≈ $25 USD/mes): always-on, sin dormir, TLS incluido; subir a "pro" (2 CPU / 4 GB) si las corridas agotan la memoria
+    region: oregon
+    branch: main
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: cbh-datos
+      mountPath: /data          # bitácora + aprendizaje + reportes persistentes
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: APP_ENV
+        value: production
+      - key: DATA_DIR
+        value: /data
+      - key: TZ
+        value: America/Mexico_City
+      - key: CONSUMO_CACHE_SEG
+        value: "3600"            # Consumo (07:00) y Abasto (07:30) comparten la misma lectura de Odoo
+      - key: ODOO_LECTURAS_PARALELAS
+        value: "4"               # lecturas grandes por bloques con 4 conexiones a la vez (mismo resultado, menos tiempo)
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_USER
+        value: condor            # usuario local de Ingeniería Cóndor (rol condor); el cliente entra desde Odoo
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SSO_SECRET
+        sync: false            # Odoo producción ▸ Ajustes ▸ Agentes de IA ▸ Secreto compartido
+      - key: EMBED_ORIGINS
+        sync: false            # vacío = pestaña nueva; URL de Odoo sólo si se usa el modo embebido
+      - key: ODOO_URL
+        sync: false            # p.ej. https://cbticket2-0.odoo.com  (rama CBH1)
+      - key: ODOO_DB
+        sync: false
+      - key: ODOO_USER
+        sync: false
+      - key: ODOO_API_KEY
+        sync: false
+      - key: ODOO_COMPANY_ID
+        sync: false            # id de la compañía CBH+ (multiempresa)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-opus-5-5     # Opus 5.5 (USD 4 / 20 por MTok): mismo nivel que Opus 5, 20 % más barato
+      - key: ANTHROPIC_MODEL_FAST
+        value: claude-sonnet-5
+      - key: BUDGET_INPUT_TOKENS
+        value: "13500000"
+      - key: BUDGET_OUTPUT_TOKENS
+        value: "1350000"
+      - key: SCHEDULE_ENABLED
+        value: "true"
+      - key: SCHEDULE_AGENT1_CRON
+        value: "0 7 * * *"       # Agente 1 diario 07:00 hora CDMX
+      - key: SCHEDULE_AGENT2_CRON
+        value: "30 7 * * 1"      # Agente 2 lunes 07:30
+      - key: SCHEDULE_VIGILANCIA_CRON
+        value: "15 */3 * * *"    # vigilancia continua cada 3 h
+      - key: DEMO_MODE
+        value: "false"
