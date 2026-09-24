@@ -348,6 +348,10 @@ def init_db() -> None:
         for col, tipo in (("origen", "TEXT DEFAULT 'local'"), ("odoo_uid", "INTEGER"), ("ultimo_sso", "TEXT"), ("ultimo_acceso", "TEXT")):
             if col not in cols_u:
                 con.execute(f"ALTER TABLE usuarios ADD COLUMN {col} {tipo}")
+        cols_l = {r["name"] for r in con.execute("PRAGMA table_info(uso_llm)")}
+        for col in ("tokens_cache_escritura", "tokens_cache_lectura", "tokens_razonamiento"):   # v1.3.11: caché de prompts
+            if col not in cols_l:
+                con.execute(f"ALTER TABLE uso_llm ADD COLUMN {col} INTEGER DEFAULT 0")
         con.execute("CREATE TABLE IF NOT EXISTS intentos_acceso (clave TEXT NOT NULL, momento REAL NOT NULL)")
         con.execute("CREATE INDEX IF NOT EXISTS ix_intentos ON intentos_acceso(clave, momento)")
         con.execute("CREATE INDEX IF NOT EXISTS ix_acciones_clave ON acciones(clave)")
@@ -742,13 +746,19 @@ def conversaciones(usuario: str | None = None, limite: int = 50) -> list[dict]:
 
 
 # ── uso de LLM ──────────────────────────────────────────────────────────────
-def registrar_uso(modelo: str, origen: str, tok_in: int, tok_out: int, usuario: str = "") -> None:
+def registrar_uso(modelo: str, origen: str, tok_in: int, tok_out: int, usuario: str = "",
+                  cache_escritura: int = 0, cache_lectura: int = 0, razonamiento: int = 0) -> None:
+    """`tokens_entrada` guarda la entrada EQUIVALENTE (lo que cuesta): tokens sin caché + escritura en caché × 1.25 +
+    lectura de caché × 0.1 (0.05 en Opus 5.5). Así el presupuesto del paquete sigue midiendo dinero aunque la caché
+    abarate la mayor parte de la entrada. Las columnas de caché guardan los tokens reales para el desglose."""
+    equivalente = settings.entrada_equivalente(tok_in, cache_escritura, cache_lectura, modelo)
     with conn() as con:
         con.execute(
-            "INSERT INTO uso_llm (ts, periodo, usuario, modelo, origen, tokens_entrada, tokens_salida, costo_usd) "
-            "VALUES (?,?,?,?,?,?,?,?)",
-            (now(), periodo(), usuario, modelo, origen, tok_in, tok_out,
-             settings.cost_usd(tok_in, tok_out, modelo)))
+            "INSERT INTO uso_llm (ts, periodo, usuario, modelo, origen, tokens_entrada, tokens_salida, costo_usd, "
+            "tokens_cache_escritura, tokens_cache_lectura, tokens_razonamiento) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (now(), periodo(), usuario, modelo, origen, equivalente, tok_out,
+             settings.cost_usd(tok_in, tok_out, modelo, cache_escritura, cache_lectura),
+             int(cache_escritura or 0), int(cache_lectura or 0), int(razonamiento or 0)))
 
 
 def presupuesto() -> dict:
@@ -769,7 +779,9 @@ def uso_periodo(p: str | None = None) -> dict:
     with conn() as con:
         r = con.execute(
             "SELECT COALESCE(SUM(tokens_entrada),0) ti, COALESCE(SUM(tokens_salida),0) to_, "
-            "COALESCE(SUM(costo_usd),0) costo, COUNT(*) llamadas FROM uso_llm WHERE periodo=?", (p,)).fetchone()
+            "COALESCE(SUM(costo_usd),0) costo, COUNT(*) llamadas, COALESCE(SUM(tokens_cache_lectura),0) cache_lectura, "
+            "COALESCE(SUM(tokens_cache_escritura),0) cache_escritura, COALESCE(SUM(tokens_razonamiento),0) razonamiento "
+            "FROM uso_llm WHERE periodo=?", (p,)).fetchone()
     ti, to_ = r["ti"], r["to_"]
     pr = presupuesto()
     pct_e, pct_s = round(100 * ti / pr["tokens_entrada"], 1), round(100 * to_ / pr["tokens_salida"], 1)
@@ -787,6 +799,7 @@ def uso_periodo(p: str | None = None) -> dict:
         "agotado": ti >= pr["tokens_entrada"] or to_ >= pr["tokens_salida"],
         "aviso": max(pct_e, pct_s) >= pr["aviso_pct"],
         "paquete": pr["paquete"],
+        "cache_lectura": r["cache_lectura"], "cache_escritura": r["cache_escritura"], "razonamiento": r["razonamiento"],
     }
 
 

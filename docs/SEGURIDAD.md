@@ -57,3 +57,8 @@ Las conversaciones y los Excels pueden borrarse desde la plataforma; la bitácor
 ## 7. Lo que el cliente debe hacer de su lado
 
 Dar al usuario técnico sólo los grupos indicados; no compartir el secreto SSO fuera de Ajustes ▸ Agentes de IA; mantener actualizados los grupos de Odoo (quitar el grupo a quien deja el puesto invalida su acceso en su siguiente entrada); usar HTTPS y dominio propio en Render; y avisar a Cóndor para rotar claves (Odoo, Anthropic, SSO) al menos cada seis meses o ante cualquier sospecha.
+
+## v1.3.11 · pantallas de administración y razonamiento del modelo
+
+- **Configuración y Bitácora** (conexión a Odoo, mapeo de modelos, límites, presupuesto de IA, usuarios, eventos del sistema) son exclusivas de los roles Administrador y Cóndor: los roles Consulta y Operación no ven esos menús y las rutas y sus API responden 403. En el copiloto, `estado_plataforma` y el contexto de esas pantallas también requieren Administrador.
+- **Razonamiento del modelo**: los bloques `thinking` que devuelve Claude 5 no se guardan en la conversación ni se reenvían entre turnos; la petición pide a la API que descarte cualquier bloque cuya firma no corresponda a la conversación (`drop_block`). Ningún dato adicional sale de la plataforma: la caché de prompts de Anthropic guarda temporalmente (5 minutos) el mismo contenido que ya se envía en cada llamada, bajo las mismas condiciones de no entrenamiento y retención de la API.

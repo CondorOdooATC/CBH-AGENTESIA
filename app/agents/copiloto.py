@@ -7,10 +7,15 @@ from ..llm import claude, prompts, tools
 from .base import contexto_aprendizaje
 
 
-def contexto_para(contexto: dict | None) -> tuple[str, str]:
+_PAGINAS_ADMIN = ("configuracion", "bitacora")      # pantallas sólo de administradores: su contexto no se abre a otros roles
+
+
+def contexto_para(contexto: dict | None, rol: str = "consulta") -> tuple[str, str]:
     """(nombre del interlocutor, bloque de contexto) para conversar con un agente o sobre un caso concreto."""
     from .base import compacto
     if not contexto:
+        return "Copiloto", ""
+    if contexto.get("pagina") in _PAGINAS_ADMIN and rol not in ("admin", "condor"):
         return "Copiloto", ""
     if contexto.get("caso_id"):
         c = db.caso(int(contexto["caso_id"]))
@@ -97,13 +102,16 @@ def responder(conversacion_id: int, texto: str, usuario: str, rol: str = "consul
               al_evento=None, contexto: dict | None = None) -> dict:
     db.guardar_mensaje(conversacion_id, "user", texto, texto)
     historial = _historial(conversacion_id)
-    nombre, bloque = contexto_para(contexto)
+    nombre, bloque = contexto_para(contexto, rol)
     if not claude.disponible():
         respuesta = db.mensaje_presupuesto_agotado() if (settings.LLM_ENABLED and db.presupuesto_agotado()) else _sin_llm(texto, usuario, rol, contexto)
         db.guardar_mensaje(conversacion_id, "assistant", respuesta, respuesta)
         return {"texto": respuesta, "herramientas": [], "interlocutor": nombre}
-    system = prompts.SISTEMA_COPILOTO + f"\n\nUsuario actual: {usuario} (rol {rol}). Fecha/hora: {db.now()}.\n" \
-             f"Notas de aprendizaje vigentes:\n{contexto_aprendizaje(limite=40)}" + (f"\n\n{bloque}" if bloque else "")
+    # system en dos bloques: el estable (instrucciones del copiloto) se sirve desde la caché de prompts; el variable
+    # (usuario, fecha, notas de aprendizaje, pantalla) cambia por turno y es pequeño
+    system = [prompts.SISTEMA_COPILOTO,
+              f"Usuario actual: {usuario} (rol {rol}). Fecha/hora: {db.now()}.\n"
+              f"Notas de aprendizaje vigentes:\n{contexto_aprendizaje(limite=40)}" + (f"\n\n{bloque}" if bloque else "")]
     try:
         r = claude.bucle_herramientas(system, historial, tools.HERRAMIENTAS,
                                       lambda n, a: tools.ejecutar(n, a, usuario, rol),
@@ -112,8 +120,9 @@ def responder(conversacion_id: int, texto: str, usuario: str, rol: str = "consul
         msg = f"No pude completar la consulta con el asistente de lenguaje: {e}"
         db.guardar_mensaje(conversacion_id, "assistant", msg, msg)
         return {"texto": msg, "herramientas": []}
-    # guardar sólo los turnos nuevos (a partir del último user)
-    nuevos = r["mensajes"][len(historial):]
+    # guardar sólo los turnos nuevos (a partir del último user), sin los bloques de razonamiento del modelo: están
+    # firmados para esta llamada y la API los rechaza si se reenvían con otro system o desde otra conversación
+    nuevos = claude.sin_razonamiento(r["mensajes"][len(historial):])
     for m in nuevos:
         db.guardar_mensaje(conversacion_id, m["role"], m["content"],
                            r["texto"] if m["role"] == "assistant" and m is nuevos[-1] else "")
@@ -121,7 +130,13 @@ def responder(conversacion_id: int, texto: str, usuario: str, rol: str = "consul
     return {"texto": r["texto"], "herramientas": r["herramientas"], "iteraciones": r["iteraciones"], "interlocutor": nombre}
 
 
-def _historial(conversacion_id: int, max_turnos: int = 30) -> list[dict]:
+_TURNOS_CON_RESULTADOS = 2       # turnos recientes cuyos resultados de herramientas se reenvían completos al modelo
+
+
+def _historial(conversacion_id: int, max_turnos: int = 12) -> list[dict]:
+    """Historial que se reenvía a Claude en cada turno. Ahorro de tokens (v1.3.11): sin bloques de razonamiento de
+    turnos anteriores, últimos 12 intercambios, y los resultados de herramientas de turnos viejos se sustituyen por
+    un resumen de una línea (la respuesta redactada, que es lo que el usuario vio, se conserva íntegra)."""
     msgs = db.mensajes(conversacion_id, limite=400)
     out = []
     for m in msgs:
@@ -130,11 +145,13 @@ def _historial(conversacion_id: int, max_turnos: int = 30) -> list[dict]:
             out.append({"role": "user", "content": c})
         elif m["rol"] in ("user", "assistant"):
             out.append({"role": m["rol"], "content": c})
+    out = claude.sin_razonamiento(out)
     # recortar manteniendo pares coherentes
     if len(out) > max_turnos * 2:
         out = out[-max_turnos * 2:]
         while out and out[0]["role"] != "user":
             out.pop(0)
+    _resumir_resultados_viejos(out)
     # limpiar tool_result huérfanos al inicio
     while out and isinstance(out[0].get("content"), list) and any(b.get("type") == "tool_result" for b in out[0]["content"]):
         out.pop(0)
@@ -148,6 +165,20 @@ def _historial(conversacion_id: int, max_turnos: int = 30) -> list[dict]:
                 continue
         limpio.append(m)
     return limpio
+
+
+def _resumir_resultados_viejos(out: list[dict]) -> None:
+    """Los tool_result de turnos anteriores a los últimos _TURNOS_CON_RESULTADOS pasan a una línea: su contenido ya se
+    reflejó en la respuesta redactada y reenviarlo entero cada turno multiplica la entrada."""
+    posiciones = [i for i, m in enumerate(out) if m["role"] == "user" and isinstance(m.get("content"), str)]
+    if len(posiciones) <= _TURNOS_CON_RESULTADOS:
+        return
+    corte = posiciones[-_TURNOS_CON_RESULTADOS]
+    for m in out[:corte]:
+        if m["role"] == "user" and isinstance(m.get("content"), list):
+            for b in m["content"]:
+                if isinstance(b, dict) and b.get("type") == "tool_result" and isinstance(b.get("content"), str) and len(b["content"]) > 300:
+                    b["content"] = b["content"][:200] + " …[resultado anterior resumido; vuelve a consultar si lo necesitas]"
 
 
 def _titular(conversacion_id: int, texto: str) -> None:

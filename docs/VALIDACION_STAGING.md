@@ -107,3 +107,10 @@ Marcar cada punto con evidencia (captura, folio, fecha). Nada pasa a producción
 - [ ] Modificar la cantidad de una línea de un CB Ticket en Odoo y volver a correr: la Bitácora dice «releídas 1» y el consumo refleja la cantidad nueva.
 - [ ] Cancelar un CB Ticket y volver a correr: sus líneas desaparecen del consumo.
 - [ ] «Releer consumo completo» borra la memoria y la siguiente corrida vuelve a ser completa.
+
+## v1.3.11 · Claude 5 y ahorro de tokens
+- [ ] Copiloto: tres preguntas seguidas en la misma conversación (con herramientas de por medio) responden sin «HTTP 400 · thinking block» y sin «(sin respuesta)».
+- [ ] Copiloto: «dame un Excel del consumo de los últimos 30 días por hospital y auxiliar» → genera el archivo con `excel_desde_consulta` (una herramienta) y entrega el enlace con un resumen corto.
+- [ ] Configuración ▸ Presupuesto mensual de IA: tras varias llamadas aparece «leídos desde la caché de prompts: N tokens» y «razonamiento del modelo: N tokens»; el costo estimado por corrida del Agente · Consumo baja respecto a v1.3.10.
+- [ ] Bitácora ▸ filtro *warn*: no hay «La API rechazó la configuración opcional» repetido en cada llamada (si aparece una vez por tipo, es la adaptación normal a la cuenta).
+- [ ] Entrar desde Odoo con un usuario de grupo Operación y otro de Consulta: la barra lateral no muestra Configuración ni Bitácora; `/configuracion` y `/bitacora` responden 403. Con Administrador sí aparecen.

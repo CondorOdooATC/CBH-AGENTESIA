@@ -22,9 +22,11 @@
       <a href="/casos" class="{{ 'activa' if request.url.path.startswith('/casos') }}">📁 Casos</a>
       <a href="/hallazgos" class="{{ 'activa' if 'hallazgos' in request.url.path }}">🚩 Hallazgos</a>
       <a href="/reportes" class="{{ 'activa' if 'reportes' in request.url.path }}">📊 Excel</a>
+      {% if usuario and usuario.rol in ('admin', 'condor') %}
       <div class="sep"></div>
       <a href="/configuracion" class="{{ 'activa' if 'configuracion' in request.url.path }}">⚙️ Configuración</a>
       <a href="/bitacora" class="{{ 'activa' if 'bitacora' in request.url.path }}">📜 Bitácora</a>
+      {% endif %}
     </nav>
     <div class="foot">
       <div style="margin-bottom:8px"><span class="env-chip {{ envc }}">{{ entorno }}</span> {% if llm %}<span class="chip ok">Claude activo</span>{% else %}<span class="chip">Sin Claude · modo determinista</span>{% endif %}</div>

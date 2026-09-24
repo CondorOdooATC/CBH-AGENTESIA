@@ -184,6 +184,7 @@ PERMISOS = {  # rol mínimo por herramienta; las no listadas son de consulta
     "ejecutar_agente": "operacion", "clasificar_hallazgo": "operacion", "proponer_accion": "operacion",
     "registrar_aprendizaje": "operacion", "investigar_hallazgo": "operacion", "resolver_caso": "operacion",
     "registrar_aclaracion": "consulta", "aprobar_accion": "operacion", "rechazar_accion": "operacion", "enviar_correo": "operacion",
+    "estado_plataforma": "admin",       # conexión, mapeo y consumo de tokens: información de Configuración (sólo administradores)
 }
 
 

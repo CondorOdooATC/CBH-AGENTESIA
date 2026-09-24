@@ -32,7 +32,7 @@ class Settings:
     APP_SHORT = "Agentes CBH"
     ORG = "Ingeniería Cóndor"
     CLIENT = "Grupo CB · CBH+"
-    VERSION = "1.3.10"
+    VERSION = "1.3.11"
 
     def __init__(self) -> None:
         self.APP_ENV = os.getenv("APP_ENV", "development")
@@ -81,7 +81,16 @@ class Settings:
         self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
         self.ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-opus-5-5")
         self.ANTHROPIC_MODEL_FAST = os.getenv("ANTHROPIC_MODEL_FAST", "claude-sonnet-5")
-        self.ANTHROPIC_MAX_TOKENS = _i("ANTHROPIC_MAX_TOKENS", 8000)
+        # Los modelos Claude 5 razonan antes de responder y ese razonamiento cuenta dentro de max_tokens: se deja
+        # margen para el razonamiento + la respuesta; si aun así se corta, se reintenta una vez hasta el tope.
+        self.ANTHROPIC_MAX_TOKENS = _i("ANTHROPIC_MAX_TOKENS", 16000)
+        self.ANTHROPIC_MAX_TOKENS_TOPE = max(self.ANTHROPIC_MAX_TOKENS, _i("ANTHROPIC_MAX_TOKENS_TOPE", 32000))
+        # Esfuerzo del modelo (low | medium | high; vacío = el que trae la API: medium en Opus 5.5, high en Sonnet 5).
+        # El razonamiento se cobra como tokens de salida: «low» en las tareas con herramientas (copiloto, expedientes,
+        # vigilancia, briefing) ahorra la mayor parte; los informes y el plan razonado conservan «medium».
+        self.ANTHROPIC_EFFORT = os.getenv("ANTHROPIC_EFFORT", "low").strip().lower()
+        self.ANTHROPIC_EFFORT_INFORMES = os.getenv("ANTHROPIC_EFFORT_INFORMES", "medium").strip().lower()
+        self.ANTHROPIC_CACHE = _b("ANTHROPIC_CACHE", True)      # caché de prompts (system, herramientas e historial)
         self.ANTHROPIC_VERSION = os.getenv("ANTHROPIC_VERSION", "2023-06-01")
         self.LLM_ENABLED = _b("LLM_ENABLED", True) and bool(self.ANTHROPIC_API_KEY)
 
@@ -136,9 +145,18 @@ class Settings:
                 return self.PRICE_TABLE[k]
         return (self.PRICE_INPUT_PER_MTOK or 5.0, self.PRICE_OUTPUT_PER_MTOK or 25.0)
 
-    def cost_usd(self, tok_in: int, tok_out: int, modelo: str | None = None) -> float:
+    # Caché de prompts: escribir cuesta 1.25× la entrada; leer 0.1× (Opus 5.5: 0.05×). Fuente: docs de Anthropic, sep-2026.
+    CACHE_ESCRITURA = 1.25
+
+    def cache_lectura(self, modelo: str | None) -> float:
+        return 0.05 if (modelo or self.ANTHROPIC_MODEL or "").lower().startswith("claude-opus-5-5") else 0.1
+
+    def entrada_equivalente(self, tok_in: int, cache_w: int = 0, cache_r: int = 0, modelo: str | None = None) -> int:
+        return int(round((tok_in or 0) + (cache_w or 0) * self.CACHE_ESCRITURA + (cache_r or 0) * self.cache_lectura(modelo)))
+
+    def cost_usd(self, tok_in: int, tok_out: int, modelo: str | None = None, cache_w: int = 0, cache_r: int = 0) -> float:
         pi, po = self.precio(modelo)
-        return (tok_in / 1e6) * pi + (tok_out / 1e6) * po
+        return (self.entrada_equivalente(tok_in, cache_w, cache_r, modelo) / 1e6) * pi + (tok_out / 1e6) * po
 
 
 @lru_cache(maxsize=1)

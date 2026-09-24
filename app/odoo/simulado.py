@@ -226,7 +226,8 @@ class OdooSimulado:
                 k = (h[0] // 100) % 6  # desplazamiento por hospital
                 self.lotes_hosp[(h[0], pid)] = [lts[(h[0] + i) % len(lts)] for i in range(2)]
         nfolio = 0
-        while dia <= self.hoy:
+        # hasta ayer: las lecturas cortan en la hora actual y los folios de «hoy» entrarían o no según la hora del día
+        while dia < self.hoy.replace(hour=0):
             dow = dia.weekday()
             # Tendencia (+12 % anual) y estacionalidad (más cirugías en invierno)
             meses_transc = (dia - inicio).days / 30.0

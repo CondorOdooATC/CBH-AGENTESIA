@@ -660,7 +660,7 @@ def _preparacion(mapeo: dict, auto: dict, uso: dict, avisos: dict) -> list[dict]
 
 
 @app.get("/configuracion", response_class=HTMLResponse)
-def pagina_config(request: Request, u: dict = Depends(requiere_rol("operacion"))):
+def pagina_config(request: Request, u: dict = Depends(requiere_rol("admin"))):
     with db.conn() as con:
         usuarios = [dict(r) for r in con.execute("SELECT id, usuario, nombre, rol, activo, creado_en FROM usuarios")]
     from .odoo import memoria_consumo
@@ -678,7 +678,7 @@ def pagina_config(request: Request, u: dict = Depends(requiere_rol("operacion"))
 
 
 @app.get("/bitacora", response_class=HTMLResponse)
-def pagina_bitacora(request: Request, nivel: str | None = None, u: dict = Depends(requiere_usuario)):
+def pagina_bitacora(request: Request, nivel: str | None = None, u: dict = Depends(requiere_rol("admin"))):
     return render(request, "bitacora.html", eventos=db.bitacora(400, nivel), nivel_filtro=nivel, uso=db.uso_periodo(),
                   corridas=db.corridas(limite=40))
 
@@ -899,12 +899,12 @@ def api_nueva_conv(u: dict = Depends(requiere_usuario)):
 
 # ── API: configuración ──────────────────────────────────────────────────────
 @app.post("/api/config/probar-odoo")
-def api_probar(u: dict = Depends(requiere_rol("operacion"))):
+def api_probar(u: dict = Depends(requiere_rol("admin"))):
     return odoo_client.get_client().probar()
 
 
 @app.post("/api/config/descubrir")
-def api_descubrir(u: dict = Depends(requiere_rol("operacion"))):
+def api_descubrir(u: dict = Depends(requiere_rol("admin"))):
     return schema.descubrir()
 
 
@@ -920,7 +920,7 @@ def api_releer_consumo(u: dict = Depends(requiere_rol("admin"))):
 
 
 @app.get("/api/config/memoria-consumo")
-def api_memoria_consumo(u: dict = Depends(requiere_rol("operacion"))):
+def api_memoria_consumo(u: dict = Depends(requiere_rol("admin"))):
     from .odoo import memoria_consumo
     return memoria_consumo.estado()
 

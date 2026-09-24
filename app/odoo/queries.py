@@ -140,7 +140,11 @@ def consumo(desde: str | None = None, hasta: str | None = None, dias: int = 180,
             return hit[1].copy()
     df = _consumo(desde, hasta, dias, productos, hospitales, almacenes_ids, cli, tope, progreso)
     if ttl and cli is None:
-        _CONSUMO_CACHE.clear()
+        # hasta 4 ventanas distintas a la vez (copiloto 30 días, Consumo 180, Abasto 540…) para que no se desalojen entre sí
+        for k in [k for k, v in _CONSUMO_CACHE.items() if _t.time() - v[0] >= ttl]:
+            _CONSUMO_CACHE.pop(k, None)
+        while len(_CONSUMO_CACHE) >= 4:
+            _CONSUMO_CACHE.pop(min(_CONSUMO_CACHE, key=lambda k: _CONSUMO_CACHE[k][0]), None)
         _CONSUMO_CACHE[clave] = (_t.time(), df.copy())
     return df
 

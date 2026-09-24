@@ -125,7 +125,7 @@ async function chatGlobalEnviar(){
   const btn=document.getElementById('cg-enviar'); btn.disabled=true; btn.classList.add('loading'); document.getElementById('cg-pensando').style.display='block';
   try{ const r=await api('/api/chat','POST',{texto:t, contexto:cgCtx()}); if(r.interlocutor) document.getElementById('cg-titulo').textContent=r.interlocutor;
     let tools=''; if(r.herramientas&&r.herramientas.length){ tools='<div class="tools">🛠 '+r.herramientas.map(h=>esc(h.nombre)).join(' · ')+'</div>'; }
-    cgAdd('bot','<div class="md">'+md(r.texto||'(sin respuesta)')+'</div>'+tools); }
+    cgAdd('bot','<div class="md">'+md(r.texto||'No obtuve una respuesta redactada. Vuelve a intentarlo o reformula la pregunta.')+'</div>'+tools); }
   catch(e){ cgAdd('bot','<div class="md" style="color:var(--bad)">Error: '+esc(e.message)+'</div>'); }
   finally{ btn.disabled=false; btn.classList.remove('loading'); document.getElementById('cg-pensando').style.display='none'; }
 }
